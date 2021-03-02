@@ -1,6 +1,6 @@
 ## Omninet - Pytorch (wip)
 
-Implementation of <a href="https://arxiv.org/abs/2103.01075">OmniNet</a>, Omnidirectional Representations from Transformers, in Pytorch
+Implementation of <a href="https://arxiv.org/abs/2103.01075">OmniNet</a>, Omnidirectional Representations from Transformers, in Pytorch. The authors propose that we should be attending to all the tokens of the previous layers, leveraging recent efficient attention advances to achieve this goal.
 
 ## Citations
 
