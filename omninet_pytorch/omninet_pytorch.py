@@ -14,6 +14,9 @@ from performer_pytorch import SelfAttention as PerformerAttention
 def exists(val):
     return val is not None
 
+def get_module_device(module):
+    return next(module.parameters()).device
+
 def find_modules(nn_module, type):
     return [module for module in nn_module.modules() if isinstance(module, type)]
 
