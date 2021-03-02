@@ -23,7 +23,8 @@ omninet = Omninet(
     heads = 8,                     # number of heads
     pool_layer_tokens_every = 3,   # key to this paper - every N layers, omni attend to all tokens of all layers
     attn_dropout = 0.1,            # attention dropout
-    ff_dropout = 0.1               # feedforward dropout
+    ff_dropout = 0.1,              # feedforward dropout
+    feature_redraw_interval = 1000 # how often to redraw the projection matrix for omni attention net - Performer
 )
 
 x = torch.randn(1, 1024, 512)

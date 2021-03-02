@@ -14,6 +14,9 @@ from performer_pytorch import SelfAttention as PerformerAttention
 def exists(val):
     return val is not None
 
+def find_modules(nn_module, type):
+    return [module for module in nn_module.modules() if isinstance(module, type)]
+
 # classes
 
 class PreNorm(nn.Module):
@@ -98,7 +101,8 @@ class Omninet(nn.Module):
         heads = 8,
         pool_layer_tokens_every = 2,
         attn_dropout = 0.,
-        ff_dropout = 0.
+        ff_dropout = 0.,
+        feature_redraw_interval = 1000
     ):
         super().__init__()
 
@@ -115,7 +119,32 @@ class Omninet(nn.Module):
 
         self.layers = layers
 
+        # keep track of redrawing projection matrix for Performer
+        self.feature_redraw_interval = feature_redraw_interval
+        self.register_buffer('calls_since_last_redraw', torch.tensor(0))
+
+    def fix_projection_matrices_(self):
+        self.feature_redraw_interval = None
+
+    def check_redraw_projections(self):
+        if not self.training:
+            return
+
+        if exists(self.feature_redraw_interval) and self.calls_since_last_redraw >= self.feature_redraw_interval:
+            device = get_module_device(self)
+
+            fast_attentions = find_modules(self, FastAttention)
+            for fast_attention in fast_attentions:
+                fast_attention.redraw_projection_matrix(device)
+
+            self.calls_since_last_redraw.zero_()
+            return
+
+        self.calls_since_last_redraw += 1
+
     def forward(self, x, mask = None):
+        self.check_redraw_projections()
+
         hiddens = [x]
 
         for attn, ff, efficient_attn in self.layers:
