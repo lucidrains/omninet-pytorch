@@ -32,6 +32,28 @@ mask = torch.ones(1, 1024).bool()
 omninet(x, mask = mask) # (1, 1024, 512)
 ```
 
+Causal case, just use the class `OmninetCausal`. At the moment, it isn't faithful to the paper (I am using layer axial attention with layer positional embeddings to draw up information), but will fix this once I rework the linear attention CUDA kernel.
+
+```python
+import torch
+from omninet_pytorch import OmninetCausal
+
+omninet = OmninetCausal(
+    dim = 512,                     # model dimension
+    depth = 6,                     # depth
+    dim_head = 64,                 # dimension per head
+    heads = 8,                     # number of heads
+    pool_layer_tokens_every = 3,   # key to this paper - every N layers, omni attend to all tokens of all layers
+    attn_dropout = 0.1,            # attention dropout
+    ff_dropout = 0.1               # feedforward dropout
+)
+
+x = torch.randn(1, 1024, 512)
+mask = torch.ones(1, 1024).bool()
+
+omninet(x, mask = mask) # (1, 1024, 512)
+```
+
 ## Citations
 
 ```bibtex

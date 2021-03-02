@@ -129,3 +129,61 @@ class Omninet(nn.Module):
                 x += rearrange(pooled_tokens, 'b c n -> b n c')
 
         return x
+
+# causal case is sufficiently different to warrant its own class
+# use layer axial attention for now, until I rewrite the linear attention cuda kernel
+
+class OmninetCausal(nn.Module):
+    def __init__(
+        self,
+        *,
+        dim,
+        depth,
+        dim_head = 64,
+        heads = 8,
+        pool_layer_tokens_every = 2,
+        attn_dropout = 0.,
+        ff_dropout = 0.
+    ):
+        super().__init__()
+
+        self.layer_pos_emb = nn.Parameter(torch.randn(depth + 1, dim))
+
+        layers = nn.ModuleList([])
+        for ind in range(depth):
+            num_layers = ind + 1
+            should_pool = num_layers % pool_layer_tokens_every
+
+            layers.append(nn.ModuleList([
+                PreNorm(dim, Attention(dim = dim, dim_head = dim_head, heads = heads, dropout = attn_dropout)),
+                PreNorm(dim, FeedForward(dim = dim, dropout = ff_dropout)),
+                Attention(dim = dim, heads= heads, dim_head = dim_head) if should_pool else None
+            ]))
+
+        self.layers = layers
+
+    def forward(self, x, mask = None):
+        b = x.shape[0]
+        pos_embs = rearrange(self.layer_pos_emb, 'n d -> () n d')
+
+        x += pos_embs[:, 0]
+        hiddens = [x]
+
+        for ind, (attn, ff, layer_axial_attn) in enumerate(self.layers):
+
+            x = attn(x, mask = mask) + x
+            x = ff(x) + x
+
+            x += pos_embs[:, ind + 1]
+            hiddens.append(x)
+
+            if exists(layer_axial_attn):
+                num_layers = len(hiddens)
+                layer_tokens = rearrange(torch.stack(hiddens), 'l b n d -> (b n) l d')
+
+                attended_tokens = layer_axial_attn(layer_tokens)
+                attended_tokens = rearrange(attended_tokens, '(b n) l d -> b n l d', b = b)
+                pooled_attended_tokens = attended_tokens.max(dim = -2).values
+                x += pooled_attended_tokens
+
+        return x
