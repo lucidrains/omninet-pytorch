@@ -1,4 +1,4 @@
-<img src="./omninet.png" width="600px"></img>
+<img src="./omninet.png" width="400px"></img>
 
 ## Omninet - Pytorch (wip)
 
