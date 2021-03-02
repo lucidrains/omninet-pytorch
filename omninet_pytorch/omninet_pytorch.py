@@ -45,12 +45,14 @@ class Attention(nn.Module):
         dim,
         heads = 8,
         dim_head = 64,
-        dropout = 0.
+        dropout = 0.,
+        causal = False
     ):
         super().__init__()
         inner_dim = heads * dim_head
         self.heads =  heads
         self.scale = dim_head ** -0.5
+        self.causal = causal
 
         self.to_qkv = nn.Linear(dim, inner_dim * 3, bias = False)
 
@@ -60,16 +62,23 @@ class Attention(nn.Module):
         )
 
     def forward(self, x, mask = None):
-        b, n, d, h = *x.shape, self.heads
+        b, n, d, h, device = *x.shape, self.heads, x.device
         q, k, v = self.to_qkv(x).chunk(3, dim = -1)
         q, k, v = map(lambda t: rearrange(t, 'b n (h d) -> (b h) n d', h = h), (q, k, v))
 
         sim = einsum('b i d, b j d -> b i j', q, k) * self.scale
 
+        max_neg_value = -torch.finfo(sim.dtype).max
+
         if exists(mask):
-            max_neg_value = -torch.finfo(sim.dtype).max
             mask = rearrange(mask, 'b i -> b i ()') * rearrange(mask, 'b j -> b () j')
             sim.masked_fill_(~mask, max_neg_value)
+
+        if self.causal:
+            i, j = sim.shape[-2:]
+            causal_mask = torch.ones(i, j, device = device).triu_(j - i + 1).bool()
+            causal_mask = rearrange(causal_mask, 'i j -> () i j')
+            sim.masked_fill_(causal_mask, max_neg_value)
 
         attn = sim.softmax(dim = -1)
 
@@ -155,7 +164,7 @@ class OmninetCausal(nn.Module):
             should_pool = num_layers % pool_layer_tokens_every
 
             layers.append(nn.ModuleList([
-                PreNorm(dim, Attention(dim = dim, dim_head = dim_head, heads = heads, dropout = attn_dropout)),
+                PreNorm(dim, Attention(causal = True, dim = dim, dim_head = dim_head, heads = heads, dropout = attn_dropout)),
                 PreNorm(dim, FeedForward(dim = dim, dropout = ff_dropout)),
                 Attention(dim = dim, heads= heads, dim_head = dim_head) if should_pool else None
             ]))
