@@ -121,6 +121,7 @@ class Omninet(nn.Module):
             ]))
 
         self.layers = layers
+        self.pool_num_layers = pool_layer_tokens_every
 
         # keep track of redrawing projection matrix for Performer
         self.feature_redraw_interval = feature_redraw_interval
@@ -147,6 +148,7 @@ class Omninet(nn.Module):
 
     def forward(self, x, mask = None):
         self.check_redraw_projections()
+        pool_num_layers = self.pool_num_layers
 
         hiddens = [x]
 
@@ -156,8 +158,11 @@ class Omninet(nn.Module):
 
             hiddens.append(x)
             if exists(efficient_attn):
-                num_layers = len(hiddens)
-                all_tokens = rearrange(torch.stack(hiddens), 'l b n d -> b (n l) d')
+                layers_to_pool = hiddens[-pool_num_layers:]
+                num_layers = len(layers_to_pool)
+
+                all_tokens = torch.stack(layers_to_pool)
+                all_tokens = rearrange(all_tokens, 'l b n d -> b (n l) d')
 
                 pool_attn_mask = None
                 if exists(mask):
@@ -202,8 +207,11 @@ class OmninetCausal(nn.Module):
             ]))
 
         self.layers = layers
+        self.pool_num_layers = pool_layer_tokens_every
 
     def forward(self, x, mask = None):
+        pool_num_layers = self.pool_num_layers
+
         b = x.shape[0]
         pos_embs = rearrange(self.layer_pos_emb, 'n d -> () n d')
 
@@ -219,8 +227,10 @@ class OmninetCausal(nn.Module):
             hiddens.append(x)
 
             if exists(layer_axial_attn):
-                num_layers = len(hiddens)
-                layer_tokens = rearrange(torch.stack(hiddens), 'l b n d -> (b n) l d')
+                layers_to_pool = hiddens[-pool_num_layers:]
+                num_layers = len(layers_to_pool)
+
+                layer_tokens = rearrange(torch.stack(layers_to_pool), 'l b n d -> (b n) l d')
 
                 attended_tokens = layer_axial_attn(layer_tokens)
                 attended_tokens = rearrange(attended_tokens, '(b n) l d -> b n l d', b = b)
